@@ -1,0 +1,14 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"type": "tinyscript",
+			"request": "launch",
+			"name": "Debug tinyscript",
+			"stopOnEntry": true,
+			"trace": false,
+			"debugServer": 4711,
+            "cwd": "path to script path"
+		}
+	]
+}

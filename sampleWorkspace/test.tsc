@@ -1,0 +1,1054 @@
+#import "../../../../Common/Scripts/PlayerCode.script"
+#import "../event/source.tsc"
+#import "../utils/time.tsc"
+#import "../utils/stree.tsc"
+#import "../utils/array.tsc"
+#import "../dao/dao.tsc"
+
+#import "../../../../Common/Scripts/Error.script"
+#import "./cheatkey/cheatkey.tsc"
+#import "./payment/payment.tsc"
+#import "./level.tsc"
+#import "./tutorial.tsc"
+#import "./item.tsc"
+#import "./giftBox.tsc"
+#import "./map/mapManager.tsc"
+#import "./map/mapBank.tsc"
+#import "./factory.tsc"
+#import "./objects/dragonManager.tsc"
+#import "./objects/crop.tsc"
+#import "./store.tsc"
+#import "./order/order.tsc"
+#import "./artifact.tsc"
+#import "./mail.tsc"
+#import "./activity/activity.tsc"
+#import "./plantFactory.tsc"
+#import "./buff.tsc"
+#import "./energy.tsc"
+#import "./mapDrop.tsc"
+#import "./quest/quest.tsc"
+#import "./trigger.tsc"
+#import "./achievement.tsc"
+#import "./collection.tsc"
+#import "./community.tsc"
+#import "./systemMessage.tsc"
+#import "./miniGame/miniGame.tsc"
+#import "./head.tsc"
+#import "./online.tsc"
+#import "./net/net.tsc"
+#import "./tga.tsc"
+#import "./videoAds.tsc"
+#import "./cdkey.tsc"
+#import "./guild.tsc"
+#import "./returning.tsc"
+#import "./push.tsc"
+#import "./visit.tsc"
+#import "./extraReward.tsc"
+#import "./skins.tsc"
+#import "./h5.tsc"
+#import "./lost.tsc"
+#import "./vip.tsc"
+#import "./skins.tsc"
+#import "./mysteriousStore.tsc"
+#import "./merge/mcollection.tsc"
+#import "./merge/mquest.tsc"
+// #import "./dragonExpedition.tsc"
+
+Player.init = function (fpid, tid, lang, gameCode, version, channel) {
+    if (this.initialized == true) {
+        return
+    }
+
+    Player.Net["protocol"] = "player.init"
+
+    this.initialized = true
+
+    this.dataVersion = DataManager.Version?.version
+
+    log.info("Player initialize: ", this.id)
+
+    this.playerId = toInt(this.id)
+
+    var resp = createNetResponse()
+
+    if (!this.Item.init()) {
+        log.error("item init failed !")
+        return false
+    }
+
+    var res = DbSelectLimit("TPlayer", {
+        PlayerID: this.playerId
+    }, 1)
+
+    if (res.error != "") {
+        return false
+    }
+
+    this.Level.init()
+    this.Tutorial.init()
+    this.Payment.init(resp)
+
+    var now = getNow()
+
+    var createPlayer = res.result.length() == 0
+
+    if (createPlayer) {
+        DbInsert("TPlayer", {
+            PlayerID: Player.playerId,
+            Level: this.Level.level,
+            CurrentMapID: 0,
+            LastEnergyIncTime: 0,
+            TutorialRef: 0,
+            Code: 0,
+            RegisterTime: now,
+            Version: version,
+            Channel: channel
+        })
+
+        DbInsert("TPlayerMap", {
+            PlayerID: this.playerId,
+            FPID: fpid,
+        })
+
+        this.setKeyValue("name", this.id)
+        this.setKeyValue("info", "")
+        this.setKeyValue("fpid", fpid)
+        this.setKeyValue("tid", tid)
+        this.setKeyValue("vipLevel", 0)
+
+
+        if (!IsProdEnv()) {
+            tga.setOnce(this.fpid, this.tid, {
+                TestPlayer: true
+            })
+        }
+
+        this.lastEnergyIncTime = 0
+        this.currentMapId = 0
+        this.code = 0
+        this.version = version
+        this.channel = channel
+
+        Player.Item.resetCount(TItemType.MiniGame, TMiniGameItem.SlotsValue, GAME_CONST.MiniGame.Slots.InitCorrection, null)
+
+        this.registerTime = now
+
+        Player.Item.setNamedItemCount(NamedItemType.Gameplay, NamedItem.VipPointSendRecord, 1)
+    } else {
+        var dbData = res.result[0]
+
+        this.code = dbData.Code
+        this.version = dbData.Version
+        this.channel = dbData.Channel
+
+        this.currentMapId = dbData.CurrentMapID
+
+        this.Level.initFromDb(dbData)
+        this.Tutorial.initFromDb(dbData)
+
+        this.lastEnergyIncTime = dbData.LastEnergyIncTime
+        this.registerTime = dbData.RegisterTime
+
+        var dbResult = DbSelect("TPlayerKeyValue", {
+            PlayerID: this.playerId
+        })
+
+        dbResult.result.forEach((dbData) => {
+            this[dbData.Key] = dbData.Value
+        })
+
+        if (this.code != gameCode && gameCode > -1) {
+            this.code = gameCode
+
+            if ((this.code & PlayerCodeType.GM) != 0) {
+                tga.setOnce(this.fpid, this.tid, {
+                    TestPlayer: true
+                })
+            }
+
+            DbUpdate("TPlayer", {
+                Code: gameCode,
+            }, {
+                PlayerID: this.playerId
+            })
+        }
+
+        if (this.version != version && version > -1) {
+            this.version = version
+            DbUpdate("TPlayer", {
+                Version: version,
+            }, {
+                PlayerID: this.playerId
+            })
+        }
+
+        if (this.channel != channel && channel > -1) {
+            this.channel = channel
+            DbUpdate("TPlayer", {
+                Channel: channel,
+            }, {
+                PlayerID: this.playerId
+            })
+        }
+    }
+
+    if (lang != "") {
+        this.setKeyValue("lang", lang)
+        this.syncShareInfoLang()
+    }
+
+    if (Player.vipLevel == null) {
+        this.setKeyValue("vipLevel", 0)
+    }
+
+    this.Vip.init(resp)
+    this.Buff.init()
+    this.Building.init()
+    this.Construction.init()
+    this.TreasureBox.init()
+    this.Factory.init()
+    this.Dragon.init()
+    this.GiftBox.init()
+    this.Store.init()
+    this.Order.init()
+    this.Crop.init()
+    this.Artifact.init()
+    this.Bomb.init()
+
+    this.PlantFactory.init()
+    this.Dealer.init()
+    this.Entrance.init()
+    this.Blocker.init()
+    this.Animal.init()
+    this.Expansion.init()
+    this.FacilitySlot.init()
+    this.MapGear.init()
+    this.Dummy.init()
+    this.Weed.init()
+
+    this.Guild.init()
+    this.Energy.init()
+
+    this.Online.init(resp)
+    this.Head.init()
+    this.Item.on((event) => {
+        this.itemEvent(event)
+    })
+
+    this.Lost.init()
+
+    this.MCleaner.init()
+    this.MBox.init()
+    this.MBuilder.init()
+
+    this.Map.init()
+    this.MapBank.init()
+    this.ExtraReward.init()
+    this.Activity.init(resp)
+    this.MapDrop.init()
+    this.Collection.init()
+    this.MysteriousStore.init()
+    this.MCollection.init()
+    this.NPCSkin.init(resp)
+    this.Achievement.init()
+    this.Quest.init()
+    this.MQuest.init()
+    this.Trigger.init()
+    this.MiniGame.init()
+    this.Mail.init()
+    this.Tga.init()
+    this.Returning.init()
+
+
+    Player.videoAds.init()
+
+    if (createPlayer) {
+        Player.Level.initFromData()
+    }
+
+    this.Map.initMaps()
+    this.Item.refreshEnergy()
+    // this.DragonExpedition.init(resp)
+
+    this.Construction.fixConstruction(resp)
+
+    if (!createPlayer) {
+        this.Payment.handlePendingTransaction()
+    }
+
+    return true
+}
+
+Player.itemEvent = function (event) {
+    if (event.itemType != TItemType.Item) {
+        return
+    }
+
+    switch (event.type) {
+        case ItemEventType.Add: {
+            switch (event.id) {
+                case GAME_CONST.EnergyItemId: {
+                    if (this.Item.items[TItemType.Item][GAME_CONST.EnergyItemId].count >= this.Level.maxEnergy(getNow())) {
+                        this.lastEnergyIncTime = 0
+                        this.updateLastEnergyIncTime()
+                    }
+                }
+                break
+            }
+        }
+        break
+    case ItemEventType.Remove: {
+        switch (event.id) {
+            case GAME_CONST.EnergyItemId: {
+                if (this.Item.items[TItemType.Item][GAME_CONST.EnergyItemId].count < this.Level.maxEnergy(getNow()) && this.lastEnergyIncTime == 0) {
+                    this.lastEnergyIncTime = getNow()
+                    this.updateLastEnergyIncTime()
+                }
+            }
+            break
+        }
+    }
+    break
+    }
+}
+
+Player.setKeyValue = function (key, value) {
+    if (this[key] == null) {
+        DbInsert("TPlayerKeyValue", {
+            PlayerID: Player.playerId,
+            Key: key,
+            Value: value,
+        })
+    } else {
+        DbUpdate("TPlayerKeyValue", {
+            Value: value
+        }, {
+            PlayerID: Player.playerId,
+            Key: key
+        })
+    }
+
+    this[key] = value
+}
+
+Player.getKeyValue = function (key) {
+    return this[key]
+}
+
+Player.deleteKeyValue = function (key) {
+    if (this[key] != null) {
+        log.info("Player.deleteKeyValue, playerId, key ", this.playerId, key)
+        DbDelete("TPlayerKeyValue", {
+            PlayerID: Player.playerId,
+            Key: key
+        })
+    }
+}
+
+Player.setBoardMsg = function (msg, resp) {
+    if (msg != null) {
+        msg = msg.toString()
+    } else {
+        resp.error = ERROR.DataMismatch
+        return
+    }
+
+    if (msg.length() > GAME_CONST.BoardMsgMaxLength) {
+        resp.error = ERROR.TextLengthLimit
+        return
+    }
+
+    this.setKeyValue("boardMsg", msg)
+}
+
+Player.setName = function (name, resp) {
+    if (name != null) {
+        name = name.toString()
+    } else {
+        resp.error = ERROR.DataMismatch
+        return
+    }
+
+    if (name.length() > GAME_CONST.PlayerNameMaxLength) {
+        resp.error = ERROR.TextLengthLimit
+        return
+    }
+
+    var price = DataCache.changeNamePrice.getPrice(Player.Item.getCountEx(TItemType.Gameplay, TItem.ChangeNameCount))
+    if (Player.Item.getCount(GAME_CONST.DiamondItemId) < price) {
+        resp.error = ERROR.ItemUnderflow
+        return
+    }
+
+    Player.Item.removeItem(GAME_CONST.DiamondItemId, price, resp)
+    Player.Item.addItemEx(TItemType.Gameplay, TItem.ChangeNameCount, 1, resp)
+
+    this.setKeyValue("name", name)
+
+    this.syncShareInfoName()
+}
+
+Player.setInfo = function (info, resp) {
+    if (info != null) {
+        info = info.toString()
+    } else {
+        resp.error = ERROR.DataMismatch
+        return
+    }
+
+    if (info.length() > 240) {
+        resp.error = ERROR.TextLengthLimit
+        return
+    }
+
+    this.setKeyValue("info", info)
+}
+
+Player.setEmail = function (email, resp) {
+    if (email != null) {
+        email = email.toString()
+    } else {
+        resp.error = ERROR.DataMismatch
+        return
+    }
+
+    if (email.length() > 128) {
+        resp.error = ERROR.TextLengthLimit
+        return
+    }
+
+    this.setKeyValue("email", email)
+}
+
+Player.setBirthMsg = function (msg, resp) {
+    if (msg == null) {
+        resp.error = ERROR.DataMismatch
+        return
+    }
+
+    if (Player.Vip.vipLevel < GAME_CONST.Vip_Informationget_Viplevel) {
+        resp.error = ERROR.DataMismatch
+        return
+    }
+
+    if (Player.birthMsg != null) {
+        resp.error = ERROR.DataMismatch
+        return
+    }
+
+    if (msg.length() > 128) {
+        resp.error = ERROR.TextLengthLimit
+        return
+    }
+
+    var birthMsg = json.decode(msg)
+    var birthDay = birthMsg.birthDay
+    var offsetTime = birthMsg.offsetTime
+
+    if (birthDay == null || offsetTime == 0) {
+        resp.error = ERROR.DataMismatch
+        return
+    }
+
+    this.setKeyValue("birthMsg", msg)
+
+    Player.Vip.sendBirthMail(resp)
+
+    tga.log(Player.fpid, Player.tid, "BirthMsg", birthMsg)
+}
+
+Player.energyExchange = function (id, resp) {
+    var exchangeData = DataManager.EnergyExchange.GetValue(id)
+    if (exchangeData == null) {
+        resp.error = ERROR.InvalidKeyInTable
+        return
+    }
+
+    if (this.Item.getCount(GAME_CONST.DiamondItemId) < exchangeData.Diamond) {
+        resp.error = ERROR.ItemUnderflow
+        return
+    }
+
+    this.Item.addItem(GAME_CONST.EnergyItemId, exchangeData.Energy, resp)
+    this.Item.removeItem(GAME_CONST.DiamondItemId, exchangeData.Diamond, resp)
+
+    Player.Item.emitEvent({
+        type: ItemEventType.EnergyExchange,
+        id: id,
+        resp: resp,
+    })
+}
+
+Player.toBuildingProtocol = function (mapId) {
+    return {
+        construction: this.Construction.toProtocol(mapId),
+        dragonTree: this.Dragon.treesToProtocol(mapId),
+        dragonHome: this.Dragon.homesToProtocol(mapId),
+        factory: this.Factory.factoryToProtocol(mapId),
+        exchangeFactory: this.Factory.exchangeFactoryToProtocol(mapId),
+        produceFactory: this.Factory.produceFactoryToProtocol(mapId),
+        dealer: this.Dealer.toProtocol(mapId),
+        blocker: this.Blocker.toProtocol(mapId),
+        animal: this.Animal.toProtocol(mapId),
+        expansion: this.Expansion.toProtocol(mapId),
+        facilitySlot: this.FacilitySlot.toProtocol(mapId),
+        mapGear: this.MapGear.toProtocol(mapId),
+        weed: this.Weed.toProtocol(mapId)
+    }
+}
+
+Player.gameInfo = function () {
+    var resp = {
+        error: ERROR.None,
+        name: this.name,
+        boardMsg: this.boardMsg,
+        dragonInfo: this.dragonInfo,
+        info: this.info,
+        email: this.email,
+        code: this.code,
+        currentMapId: this.currentMapId,
+        registerTime: this.registerTime,
+        nextEnergyIncTime: 0,
+        level: this.Level.level,
+        tutorial: this.Tutorial.tutorial,
+        order: this.Order.toProtocol(),
+        giftBox: this.GiftBox.toProtocol(),
+        quest: this.Quest.toProtocol(),
+        building: this.toBuildingProtocol(0),
+        dragon: this.Dragon.dragonsToProtocol(),
+        collection: this.Collection.toProtocol(),
+        mail: this.Mail.toProtocol(),
+        buff: this.Buff.toProtocol(),
+        guild: this.Guild.toProtocol(),
+        map: [],
+        closeMap: [],
+        item: this.Item.toProtocol(),
+        energy: this.Energy.toProtocol(),
+        activity: this.Activity.toProtocol(),
+        loginDays: this.Item.getCountEx(TItemType.Gameplay, TItem.LoginDays),
+        head: {
+            image: this.headImage,
+            frame: this.headFrame,
+        },
+        vipLevel: this.Vip.vipLevel,
+        mcollection: this.MCollection.toProtocol(),
+        mquest: this.MQuest.toProtocol()
+    }
+
+    Player.Map.maps.forEach((key, value) => {
+        resp.map.push({
+            id: key,
+            status: value.status,
+            shutdownTime: value.shutdownTime,
+            rewardId: value.rewardId
+        })
+    })
+
+    Player.Map.closeMaps.forEach((v) => {
+        resp.closeMap.push(v)
+    })
+
+    resp.mail.forEach((v) => {
+        v.id = v.id.toString()
+    })
+
+    return resp
+}
+
+Player.dailyUpdate = function () {
+    var level = redis.get("ta:txd_pay_prediction:" + Player.fpid)
+    if (level != '') {
+        Player.Item.resetCount(TItemType.VipPredict, TItem.VipPredictLevel, toInt(level), null)
+    }
+    this.Achievement.reset(null)
+}
+
+Player.enterGame = function () {
+    var now = getNow()
+
+    Player.videoAds.reset(null)
+    this.Returning.onEnterGame(null)
+    this.Vip.onEnterGame(null)
+    Player.dailyUpdate()
+
+    log.info("Player enterGame :", now)
+    var resp = {
+        error: ERROR.None,
+        serverTime: now,
+        name: this.name,
+        boardMsg: this.boardMsg,
+        dragonInfo: this.dragonInfo,
+        info: this.info,
+        email: this.email,
+        code: this.code,
+        birthMsg: this.birthMsg,
+        npcSkinInfo: this.npcSkinInfo,
+        currentMapId: this.currentMapId,
+        registerTime: this.registerTime,
+        nextEnergyIncTime: 0,
+        level: this.Level.level,
+        tutorial: this.Tutorial.tutorial,
+        order: this.Order.toProtocol(),
+        plantFactory: this.PlantFactory.toProtocol(),
+        giftBox: this.GiftBox.toProtocol(),
+        quest: this.Quest.toProtocol(),
+        building: this.toBuildingProtocol(0),
+        dragon: this.Dragon.dragonsToProtocol(),
+        collection: this.Collection.toProtocol(),
+        mail: this.Mail.toProtocol(),
+        buff: this.Buff.toProtocol(),
+        guild: this.Guild.toProtocol(),
+        map: [],
+        closeMap: [],
+        item: this.Item.toProtocol(),
+        crop: this.Crop.toProtocol(),
+        energy: this.Energy.toProtocol(),
+        activity: this.Activity.toProtocol(),
+        returning: this.Returning.toProtocol(),
+        lost: this.Lost.toProtocol(),
+        dataVersion: this.dataVersion,
+        npcSkin: this.NPCSkin.toProtocol(),
+        mysteriousStore: this.MysteriousStore.toMysteriousProtocol(),
+        dragonExpeditionStore: this.MysteriousStore.toDragonExpeditionProtocol(),
+        head: {
+            image: this.headImage,
+            frame: this.headFrame,
+        },
+        vipLevel: this.Vip.vipLevel,
+        mcollection: this.MCollection.toProtocol(),
+        mquest: this.MQuest.toProtocol(),
+        // expedition: this.DragonExpedition.toProtocol(),
+    }
+
+    var lastLoginTime = this.Item.getNamedItemCount(NamedItemType.Gameplay, NamedItem.LastLoginTime)
+    resp.lastLoginTime = lastLoginTime
+
+    var lastDay = timeToDay(lastLoginTime)
+
+    if (lastDay != timeToDay(now)) {
+        this.Item.addItemEx(TItemType.Gameplay, TItem.LoginDays, 1, null)
+    }
+
+    resp.loginDays = this.Item.getCountEx(TItemType.Gameplay, TItem.LoginDays)
+    this.Item.setNamedItemCount(NamedItemType.Gameplay, NamedItem.LastLoginTime, now)
+
+    if (this.lastEnergyIncTime > 0) {
+        resp.nextEnergyIncTime = (now - this.lastEnergyIncTime) % GAME_CONST.EnergyIncTime
+    }
+
+    Player.Map.maps.forEach((key, value) => {
+        resp.map.push({
+            id: key,
+            status: value.status,
+            shutdownTime: value.shutdownTime,
+            rewardId: value.rewardId
+        })
+    })
+
+    Player.Map.closeMaps.forEach((v) => {
+        resp.closeMap.push(v)
+    })
+
+    this.syncShareInfo()
+
+    return resp
+}
+
+Player.syncShareInfo = function () {
+    this.cellPost(String.format("PlayerShareInfo:{}", this.playerId), "player.shareInfo.setInfo", json.encode({
+        info: {
+            name: this.name,
+            headImage: this.headImage,
+            headFrame: this.headFrame,
+            dragonInfo: this.dragonInfo,
+            level: this.Level.level.toString(),
+            vip: this.Vip.vipLevel.toString(),
+            guildId: Player.Item.getNamedItemCount(NamedItemType.Gameplay, NamedItem.GuildID).toString(),
+            lastLoginTime: this.Item.getNamedItemCount(NamedItemType.Gameplay, NamedItem.LastLoginTime).toString(),
+            npcSkins: json.encode(this.NPCSkin.getNPCSkins()),
+            npcSkinInfo: this.npcSkinInfo,
+        }
+    }))
+}
+
+Player.syncShareInfoHead = function () {
+    this.cellPost(String.format("PlayerShareInfo:{}", this.playerId), "player.shareInfo.setInfo", json.encode({
+        info: {
+            headImage: this.headImage,
+            headFrame: this.headFrame,
+        }
+    }))
+}
+
+Player.syncShareInfoGuild = function () {
+    this.cellPost(String.format("PlayerShareInfo:{}", this.playerId), "player.shareInfo.setInfo", json.encode({
+        info: {
+            guildId: Player.Item.getNamedItemCount(NamedItemType.Gameplay, NamedItem.GuildID).toString()
+        }
+    }))
+}
+
+Player.syncVisitInfoOrder = function (value) {
+    this.cellPost(String.format("PlayerVisitInfo:{}+{}", this.playerId, this.playerId % 10), "player.visitInfo.updatePlane", json.encode({
+        order: value
+    }))
+}
+
+Player.syncShareInfoLang = function () {
+    this.cellPost(String.format("PlayerShareInfo:{}", this.playerId), "player.shareInfo.setInfo", json.encode({
+        info: {
+            lang: this.lang
+        }
+    }))
+}
+
+Player.syncShareInfoPlane = function (help) {
+    this.cellPost(String.format("PlayerShareInfo:{}", this.playerId), "player.shareInfo.setInfo", json.encode({
+        info: {
+            plane: help
+        }
+    }))
+}
+
+Player.syncShareInfoName = function () {
+    this.cellPost(String.format("PlayerShareInfo:{}", this.playerId), "player.shareInfo.setInfo", json.encode({
+        info: {
+            name: this.name
+        }
+    }))
+}
+
+Player.handleEnergyIncrease = function (resp) {
+    if (this.lastEnergyIncTime > 0) {
+        resp.energyInc = {
+            nextEnergyIncTime: getNow() - Player.lastEnergyIncTime,
+            energyValue: this.Item.items[TItemType.Item][GAME_CONST.EnergyItemId].count
+        }
+    }
+}
+
+Player.isMergeItemType = function (type) {
+    switch (type) {
+        case DataManager.enums.RewardType.MElement:
+        case DataManager.enums.RewardType.MBuilder:
+        case DataManager.enums.RewardType.MCleaner:
+        case DataManager.enums.RewardType.MBox: {
+            return true
+        }
+    }
+
+    return false
+}
+
+Player.reward = function (type, id, count, resp) {
+    switch (type) {
+        case DataManager.enums.RewardType.None: {}
+        break
+    case DataManager.enums.RewardType.Item: {
+        Player.Item.addItem(id, count, resp)
+    }
+    break
+    case DataManager.enums.RewardType.HeadImage: {
+        Player.Item.addItemEx(TItemType.HeadImage, id, count, resp)
+    }
+    break
+    case DataManager.enums.RewardType.HeadFrame: {
+        Player.Item.addItemEx(TItemType.HeadFrame, id, count, resp)
+    }
+    break
+    case DataManager.enums.RewardType.Point: {
+        Player.Item.addItemEx(TItemType.Point, id, count, resp)
+    }
+    break
+    case DataManager.enums.RewardType.Emoji: {
+        Player.Item.addItemEx(TItemType.Emoji, id, count, resp)
+    }
+    break
+    case DataManager.enums.RewardType.Energy: {
+        Player.Energy.add(id, count, resp)
+    }
+    break
+    case DataManager.enums.RewardType.Package: {
+        var map = Player.Map.maps[Player.currentMapId]
+        if (map?.SceneType == DataManager.enums.SceneType.Merge) {
+            var items = Player.Item.getPackageContent(id, count)
+
+            var mergeItems = []
+            items.forEach((item) => {
+                if (Player.isMergeItemType(item.type)) {
+                    for (var i = 0; i < item.count; i++) {
+                        var templateId = String.format("{}_{}", DataManager.enums.RewardType.GetString(item.type), item.id)
+                        var template = MapManager.mergeCommonTiles[templateId]
+
+                        var pos = this.searchPos(map.freePos.x, map.freePos.y, template.place)
+                        if (pos != null) {
+                            map.createItemFromData(pos.x, pos.y, template.dataID, template.type, true, resp)
+                        } else {
+                            mergeItems.push({
+                                type: item.type,
+                                id: item.id
+                            })
+                        }
+                    }
+                } else {
+                    Player.reward(item.type, item.id, item.count, resp)
+                }
+            })
+
+            if (mergeItems.length() > 0) {
+                map.createBubble(DataManager.enums.MergeBubbleType.Reward, mergeItems, resp)
+            }
+        } else {
+            Player.Item.addPackage(id, count, resp)
+        }
+    }
+    break
+    case DataManager.enums.RewardType.Drop: {
+        var map = Player.Map.maps[Player.currentMapId]
+        if (map?.SceneType == DataManager.enums.SceneType.Merge) {
+            var items = Player.Item.getDropContentAll(id, count)
+
+            var mergeItems = []
+            items.forEach((item) => {
+                if (Player.isMergeItemType(item.type)) {
+                    for (var i = 0; i < item.count; i++) {
+                        var templateId = String.format("{}_{}", DataManager.enums.RewardType.GetString(item.type), item.id)
+                        var template = MapManager.mergeCommonTiles[templateId]
+
+                        var pos = this.searchPos(map.freePos.x, map.freePos.y, template.place)
+                        if (pos != null) {
+                            map.createItemFromData(pos.x, pos.y, template.dataID, template.type, true, resp)
+                        } else {
+                            mergeItems.push({
+                                type: item.type,
+                                id: item.id
+                            })
+                        }
+                    }
+                } else {
+                    Player.reward(item.type, item.id, item.count, resp)
+                }
+            })
+
+            if (mergeItems.length() > 0) {
+                map.createBubble(DataManager.enums.MergeBubbleType.Reward, mergeItems, resp)
+            }
+        } else {
+            Player.Item.addDrop(id, count, resp)
+        }
+    }
+    break
+    case DataManager.enums.RewardType.Dragon: {
+        for (var i = 0; i < count; i++) {
+            Player.Dragon.createDragon(id, resp)
+        }
+    }
+    break
+    case DataManager.enums.RewardType.TimeLimitBuff: {
+        Player.Buff.activeBuff(id, resp)
+    }
+    break
+    case DataManager.enums.RewardType.TriggerBuff: {
+        Player.Buff.activeBuff(id, resp)
+    }
+    break
+    case DataManager.enums.RewardType.NPCSkin: {
+        Player.Item.addItemEx(TItemType.NPCSkin, id, count, resp)
+    }
+    break
+    case DataManager.enums.RewardType.NPCSkinSuit: {
+        Player.Item.addItemEx(TItemType.NPCSkinSuit, id, count, resp)
+    }
+    break
+    case DataManager.enums.RewardType.Card: {
+        Player.Item.addItemEx(TItemType.Card, id, count, resp)
+    }
+    break
+    default: {
+        var map = Player.Map.maps[Player.currentMapId]
+        if (Player.isMergeItemType(type) && map.tableData.SceneType == DataManager.enums.SceneType.Merge) {
+            var bubbleItems = []
+
+            for (var i = 0; i < count; i++) {
+                var templateId = String.format("{}_{}", DataManager.enums.RewardType.GetString(type), id)
+                var template = MapManager.mergeCommonTiles[templateId]
+
+                var pos = this.searchPos(map.freePos.x, map.freePos.y, template.place)
+                if (pos != null) {
+                    map.createItemFromData(pos.x, pos.y, template.dataID, template.type, true, resp)
+                } else {
+                    bubbleItems.push({
+                        type: DataManager.enums.RewardType[template.type],
+                        id: template.dataID
+                    })
+                }
+            }
+
+            map.createBubble(DataManager.enums.MergeBubbleType.Noraml, bubbleItems, resp)
+        } else {
+            Player.GiftBox.add(type, id, count, resp)
+        }
+    }
+    break
+    }
+}
+
+Player.getQuickInfo = function () {
+    return {
+        name: this.name,
+        exp: this.Item.getCount(GAME_CONST.ExpItemId),
+        coin: this.Item.getCount(GAME_CONST.CoinItemId),
+        diamond: this.Item.getCount(GAME_CONST.DiamondItemId),
+        level: this.Level.level,
+        lastLoginTime: this.Item.getNamedItemCount(NamedItemType.Gameplay, NamedItem.LastLoginTime)
+        charged: this.Item.getCountEx(TItemType.Gameplay, TItem.PaidValue)
+    }
+}
+
+Player.setShareInfo = function (req, resp) {
+    this.setKeyValue("dragonInfo", req.dragonInfo)
+    this.syncShareInfo()
+}
+
+Player.setNpcSkinInfo = function (req, resp) {
+    this.setKeyValue("npcSkinInfo", req.npcSkinInfo)
+    this.syncShareInfo()
+}
+
+Player.getShareInfo = function (req, resp) {
+    var cellResp = json.decode(this.cellInvoke(String.format("PlayerShareInfo:{}", req.playerId), "player.shareInfo.getInfo", ""))
+
+    if (cellResp?.info != null) {
+        resp.info = cellResp.info
+        resp.info.playerId = req.playerId
+    }
+}
+
+Player.getGroupPlaneInfo = function (req, resp) {
+    resp.infos = []
+
+    req.players.forEach((playerId) => {
+        var cellResp = json.decode(this.cellInvoke(String.format("PlayerShareInfo:{}", playerId), "player.shareInfo.getPlane", ""))
+        if (cellResp?.info != null) {
+            cellResp.info.playerId = playerId
+            resp.infos.push(cellResp.info)
+        }
+    })
+}
+
+Player.getGroupShareInfo = function (req, resp) {
+    resp.infos = []
+
+    req.players.forEach((playerId) => {
+        var cellResp = json.decode(this.cellInvoke(String.format("PlayerShareInfo:{}", playerId), "player.shareInfo.getInfo", ""))
+
+        if (cellResp?.info != null) {
+            cellResp.info.playerId = playerId
+            resp.infos.push(cellResp.info)
+        }
+    })
+}
+
+Player.changeCurrentMapId = function (mapId) {
+    this.currentMapId = mapId
+    DbUpdate("TPlayer", {
+        CurrentMapID: mapId
+    }, {
+        PlayerID: Player.playerId,
+    })
+}
+
+Player.loadMap = function (mapId, resp) {
+    var map = this.Map.maps[mapId]
+
+    if (map == null) {
+        resp.error = ERROR.NotExist
+        return
+    }
+
+    var now = getNow()
+
+    if (map.status == MapStatus.Open && map.tableData.EventStartTime > now && Player.code != PlayerCodeType.GM) {
+        resp.error = ERROR.TimeError
+        return
+    }
+
+    if (map.tableData.ParentID != 0) {
+        Player.Item.resetCount(TItemType.MapID, map.tableData.ParentID, mapId, resp)
+    } else {
+        Player.Item.resetCount(TItemType.MapID, mapId, 0, resp)
+    }
+
+    if (map.status == MapStatus.Open) {
+        var mapData = DataManager.Map.GetValue(mapId)
+        var prevMapId = mapData.UnlockID
+
+        if (prevMapId != 0) {
+            var prevMap = this.Map.maps[prevMapId]
+            if (prevMap != null) {
+                if (prevMap.shutdownTime == 0 && prevMap.status == MapStatus.Active) {
+                    prevMap.close(resp)
+                }
+            }
+        }
+
+        switch (map.tableData.Type) {
+            case DataManager.enums.MapType.Activity: {
+                map.close(resp)
+            }
+            break
+        case DataManager.enums.MapType.LimitTime: {
+            map.close(resp)
+        }
+        break
+        case DataManager.enums.MapType.Theme: {
+            map.close(resp)
+        }
+        break
+        default: {
+            map.setStatus(MapStatus.Active, resp)
+        }
+        }
+
+        Player.Map.emitEvent({
+            type: MapEventType.FirstEnterMap
+            mapId: mapId,
+            mapType: map.tableData.Type,
+            resp: resp
+        })
+    }
+
+    if (this.currentMapId != mapId) {
+        this.changeCurrentMapId(mapId)
+
+        Player.Map.emitEvent({
+            type: MapEventType.EnterMap
+            mapId: mapId,
+            resp: resp
+        })
+    }
+
+    Player.Map.emitEvent({
+        type: MapEventType.LoadMap
+        mapId: mapId,
+        resp: resp
+    })
+
+    resp.map = map.toProtocol()
+}
+
+Player.updateLastEnergyIncTime = function () {
+    DbUpdate("TPlayer", {
+        LastEnergyIncTime: this.lastEnergyIncTime
+    }, {
+        PlayerID: Player.playerId,
+    })
+}
+
+Player.cellCall = function (id, msg, body) {
+    return json.decode(Player.cellInvoke(id, msg, json.encode(body)))
+}
+
+Player.refresh = function () {
+    this.initialized = false
+}

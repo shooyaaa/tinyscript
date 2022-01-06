@@ -1,0 +1,231 @@
+{
+  "name": "tinyscript",
+  "displayName": "TinyScript Tools",
+  "version": "0.1.0",
+  "publisher": "luanxun",
+  "description": "TinyScript language grammar and debugger extension",
+  "author": {
+    "name": "luanxun",
+    "email": "luanxun@centurygame.com"
+  },
+  "license": "MIT",
+  "keywords": [
+    "multi-root ready"
+  ],
+  "engines": {
+    "vscode": "^1.55.0"
+  },
+  "icon": "images/mock-debug-icon.png",
+  "categories": [
+    "Debuggers"
+  ],
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shooyaaa/tinyscript"
+  },
+  "scripts": {
+    "vscode:prepublish": "yarn run package-ext",
+    "compile": "tsc -p ./",
+    "lint": "eslint src --ext ts",
+    "watch": "webpack --watch --devtool nosources-source-map --info-verbosity verbose --config ./build/extension.webpack.config.js",
+    "watch2": "tsc -watch -p ./",
+    "pretest": "yarn run compile && yarn run lint",
+    "package": "vsce package",
+    "publish": "vsce publish",
+    "package-ext": "webpack --mode production --config ./build/extension.webpack.config.js"
+  },
+  "dependencies": {
+    "await-notify": "1.0.1",
+    "child_process": "^1.0.2",
+    "net": "^1.0.2",
+    "vscode-debugadapter": "^1.48.0-pre.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.55.0",
+    "@types/glob": "^7.1.3",
+    "@types/mocha": "^8.2.2",
+    "@types/node": "^14.14.37",
+    "eslint": "^7.23.0",
+    "@typescript-eslint/eslint-plugin": "^4.21.0",
+    "@typescript-eslint/parser": "^4.21.0",
+    "glob": "^7.1.6",
+    "mocha": "^8.3.2",
+    "typescript": "^4.2.3",
+    "vscode-debugadapter-testsupport": "^1.48.0-pre.0",
+    "vsce": "^1.96.1",
+    "ts-loader": "^8.1.0",
+    "webpack": "^4.46.0",
+    "webpack-cli": "^3.3.12",
+    "copy-webpack-plugin": "^4.5.2"
+  },
+  "main": "./dist/ext/extension.js",
+  "activationEvents": [
+    "onDebugResolve:tinyscript",
+    "onDebugDynamicConfigurations:tinyscript",
+    "onCommand:extension.tinyscript-debug.getProgramName",
+    "onCommand:extension.tinyscript-debug.runEditorContents",
+    "onCommand:extension.tinyscript-debug.debugEditorContents",
+    "onLanguage:tinyscript"
+  ],
+  "workspaceTrust": {
+    "request": "never"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "tinyscript",
+        "extensions": [
+          ".tsc"
+        ],
+        "configuration": "./syntaxes/tinyscript.grammar.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "tinyscript",
+        "scopeName": "source.tsc",
+        "path": "./syntaxes/tinyscript.grammar.json"
+      }
+    ],
+    "menus": {
+      "editor/title/run": [
+        {
+          "command": "extension.tinyscript-debug.runEditorContents",
+          "when": "resourceLangId == tinyscript"
+        },
+        {
+          "command": "extension.tinyscript-debug.debugEditorContents",
+          "when": "resourceLangId == tinyscript"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "extension.tinyscript-debug.debugEditorContents",
+          "when": "resourceLangId == tinyscript"
+        },
+        {
+          "command": "extension.tinyscript-debug.runEditorContents",
+          "when": "resourceLangId == tinyscript"
+        }
+      ],
+      "debug/variables/context": [
+        {
+          "command": "extension.tinyscript-debug.toggleFormatting",
+          "when": "debugType == 'tinyscript' && debugProtocolVariableMenuContext == 'simple'"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "extension.tinyscript-debug.debugEditorContents",
+        "title": "Debug File",
+        "category": "Tinyscript Debug",
+        "enablement": "!inDebugMode",
+        "icon": "$(debug-alt)"
+      },
+      {
+        "command": "extension.tinyscript-debug.runEditorContents",
+        "title": "Run File",
+        "category": "Tinyscript Debug",
+        "enablement": "!inDebugMode",
+        "icon": "$(play)"
+      },
+      {
+        "command": "extension.tinyscript-debug.toggleFormatting",
+        "title": "Toggle between decimal and hex formatting"
+      }
+    ],
+    "breakpoints": [
+      {
+        "language": "tinyscript"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "tinyscript",
+        "languages": [
+          "tinyscript"
+        ],
+        "label": "Tinyscript Debug",
+        "program": "./out/debugAdapter.js",
+        "runtime": "node",
+        "configurationAttributes": {
+          "launch": {
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Absolute path to a text file.",
+                "default": "${workspaceFolder}/${command:AskForProgramName}"
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Automatically stop after launch.",
+                "default": true
+              },
+              "trace": {
+                "type": "boolean",
+                "description": "Enable logging of the Debug Adapter Protocol.",
+                "default": true
+              },
+              "runtimeExecutable": {
+                "type": "string",
+                "description": "Absolute path to the runtime executable to be used. Default is the runtime executable on the PATH.",
+                "default": "ts-cli"
+              },
+              "runtimeArgs": {
+                "type": "array",
+                "description": "Command line arguments passed to the program."
+              },
+              "hostname": {
+                "type": "string",
+                "description": "Address to bind to when listening for debug",
+                "default": "::"
+              },
+              "port": {
+                "type": "number",
+                "description": "Port on which to listen for debug",
+                "default": 9003
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Absolute path to the working directory of the program being debugged. Default is the current workspace.",
+                "default": "${workspaceRoot}"
+              },
+              "startProcess": {
+                "type": "boolean",
+                "description": "Whether to start the runtime executable process",
+                "default": true
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "tinyscript",
+            "request": "launch",
+            "name": "Ask for file name",
+            "program": "${workspaceFolder}/${command:AskForProgramName}",
+            "stopOnEntry": true
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Tinyscript Debug: Launch",
+            "description": "A new configuration for 'debugging' a user selected markdown file.",
+            "body": {
+              "type": "tinyscript",
+              "request": "launch",
+              "name": "Ask for file name",
+              "program": "^\"\\${workspaceFolder}/\\${command:AskForProgramName}\"",
+              "stopOnEntry": true
+            }
+          }
+        ],
+        "variables": {
+          "AskForProgramName": "extension.tinyscript-debug.getProgramName"
+        }
+      }
+    ]
+  }
+}
