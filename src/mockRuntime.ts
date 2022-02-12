@@ -198,19 +198,22 @@ export class MockRuntime extends EventEmitter {
                 MockRuntime._server.listen(5678, args.hostname)
 				return MockRuntime._server
 			})
-		try {
-			if (!args.noDebug) {
-				if (MockRuntime._process == undefined && (args.startProcess == undefined || args.startProcess == true)) {
-					MockRuntime._process = this.startProgram(args.runtimeExecutable, args.runtimeArgs, args.cwd)
-				}
+			try {
 				if (MockRuntime._server == undefined) {
 					await createServer()
 				}
+				if (!args.noDebug) {
+					if (MockRuntime._process == undefined && (args.startProcess != undefined && args.startProcess == true)) {
+						MockRuntime._process = this.startProgram(args.runtimeExecutable, args.runtimeArgs, args.cwd)
+						MockRuntime._process.on('exit', () => {
+							MockRuntime._process = undefined
+						})
+					}
+				}
+			} catch (error) {
+				this.sendEvent('output', error, '', '', '')
+				return 
 			}
-		} catch (error) {
-			this.sendEvent('output', error, '', '', '')
-			return 
-		}
 
 	}
 
@@ -218,6 +221,7 @@ export class MockRuntime extends EventEmitter {
 		if (MockRuntime._process) {
 			process.kill(-MockRuntime._process.pid)
 		}
+		MockRuntime._process = undefined
 		if (MockRuntime._server) {
 			MockRuntime._server.close(err => {
 				this.sendEvent('output', "Error while close server " + err)

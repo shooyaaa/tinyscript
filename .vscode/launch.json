@@ -7,7 +7,8 @@
 			"request": "launch",
 			"args": [
 				"--extensionDevelopmentPath=${workspaceFolder}",
-				"/Users/luanxun/code/DragonAdventure/Server/assets/scripts/player/"
+                "/Users/luanxun/code/DragonAdventure/Client/Assets"
+				//"/Users/luanxun/code/DragonAdventure/Server/assets/scripts/player/"
 			],
 			"outFiles": [
 				"${workspaceFolder}/dist/ext/**/*.js"

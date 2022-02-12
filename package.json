@@ -62,11 +62,15 @@
   "main": "./dist/ext/extension.js",
   "activationEvents": [
     "onDebugResolve:tinyscript",
+    "onDebugResolve:sco",
     "onDebugDynamicConfigurations:tinyscript",
-    "onCommand:extension.tinyscript-debug.getProgramName",
+    "onDebugDynamicConfigurations:sco",
     "onCommand:extension.tinyscript-debug.runEditorContents",
+    "onCommand:extension.sco-debug.runEditorContents",
     "onCommand:extension.tinyscript-debug.debugEditorContents",
-    "onLanguage:tinyscript"
+    "onCommand:extension.sco-debug.debugEditorContents",
+    "onLanguage:tinyscript",
+    "onLanguage:sco"
   ],
   "workspaceTrust": {
     "request": "never"
@@ -79,11 +83,23 @@
           ".tsc"
         ],
         "configuration": "./syntaxes/tinyscript.grammar.json"
+      },
+      {
+        "id": "sco",
+        "extensions": [
+          ".sco"
+        ],
+        "configuration": "./syntaxes/tinyscript.grammar.json"
       }
     ],
     "grammars": [
       {
         "language": "tinyscript",
+        "scopeName": "source.tsc",
+        "path": "./syntaxes/tinyscript.grammar.json"
+      },
+      {
+        "language": "sco",
         "scopeName": "source.tsc",
         "path": "./syntaxes/tinyscript.grammar.json"
       }
@@ -97,6 +113,14 @@
         {
           "command": "extension.tinyscript-debug.debugEditorContents",
           "when": "resourceLangId == tinyscript"
+        },
+        {
+          "command": "extension.sco-debug.runEditorContents",
+          "when": "resourceLangId == sco"
+        },
+        {
+          "command": "extension.sco-debug.debugEditorContents",
+          "when": "resourceLangId == sco"
         }
       ],
       "commandPalette": [
@@ -107,12 +131,24 @@
         {
           "command": "extension.tinyscript-debug.runEditorContents",
           "when": "resourceLangId == tinyscript"
+        },
+        {
+          "command": "extension.sco-debug.debugEditorContents",
+          "when": "resourceLangId == sco"
+        },
+        {
+          "command": "extension.sco-debug.runEditorContents",
+          "when": "resourceLangId == sco"
         }
       ],
       "debug/variables/context": [
         {
           "command": "extension.tinyscript-debug.toggleFormatting",
           "when": "debugType == 'tinyscript' && debugProtocolVariableMenuContext == 'simple'"
+        },
+        {
+          "command": "extension.sco-debug.toggleFormatting",
+          "when": "debugType == 'sco' && debugProtocolVariableMenuContext == 'simple'"
         }
       ]
     },
@@ -126,19 +162,40 @@
       },
       {
         "command": "extension.tinyscript-debug.runEditorContents",
-        "title": "Run File",
+        "title": "Run tsc",
         "category": "Tinyscript Debug",
+        "enablement": "!inDebugMode",
+        "icon": "$(play)"
+      },
+      {
+        "command": "extension.sco-debug.debugEditorContents",
+        "title": "Debug sco",
+        "category": "Sco  Debug",
+        "enablement": "!inDebugMode",
+        "icon": "$(debug-alt)"
+      },
+      {
+        "command": "extension.sco-debug.runEditorContents",
+        "title": "Run Sco",
+        "category": "Sco Debug",
         "enablement": "!inDebugMode",
         "icon": "$(play)"
       },
       {
         "command": "extension.tinyscript-debug.toggleFormatting",
         "title": "Toggle between decimal and hex formatting"
+      },
+      {
+        "command": "extension.sco-debug.toggleFormatting",
+        "title": "Toggle between decimal and hex formatting"
       }
     ],
     "breakpoints": [
       {
         "language": "tinyscript"
+      },
+      {
+        "language": "sco"
       }
     ],
     "debuggers": [
@@ -153,11 +210,6 @@
         "configurationAttributes": {
           "launch": {
             "properties": {
-              "program": {
-                "type": "string",
-                "description": "Absolute path to a text file.",
-                "default": "${workspaceFolder}/${command:AskForProgramName}"
-              },
               "stopOnEntry": {
                 "type": "boolean",
                 "description": "Automatically stop after launch.",
@@ -204,27 +256,82 @@
           {
             "type": "tinyscript",
             "request": "launch",
-            "name": "Ask for file name",
-            "program": "${workspaceFolder}/${command:AskForProgramName}",
+            "name": "Debug Tinyscript",
             "stopOnEntry": true
           }
         ],
         "configurationSnippets": [
           {
             "label": "Tinyscript Debug: Launch",
-            "description": "A new configuration for 'debugging' a user selected markdown file.",
+            "description": "A new configuration for debugging tinyscript",
             "body": {
               "type": "tinyscript",
               "request": "launch",
-              "name": "Ask for file name",
-              "program": "^\"\\${workspaceFolder}/\\${command:AskForProgramName}\"",
+              "name": "Debug Tinyscript",
               "stopOnEntry": true
             }
           }
+        ]
+      },
+      {
+        "type": "sco",
+        "languages": [
+          "sco"
         ],
-        "variables": {
-          "AskForProgramName": "extension.tinyscript-debug.getProgramName"
-        }
+        "label": "Sco Debug",
+        "program": "./out/debugAdapter_sco.js",
+        "runtime": "node",
+        "configurationAttributes": {
+          "launch": {
+            "properties": {
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Automatically stop after launch.",
+                "default": true
+              },
+              "trace": {
+                "type": "boolean",
+                "description": "Enable logging of the Debug Adapter Protocol.",
+                "default": true
+              },
+              "hostname": {
+                "type": "string",
+                "description": "Address to bind to when listening for debug",
+                "default": "::"
+              },
+              "port": {
+                "type": "number",
+                "description": "Port on which to listen for debug",
+                "default": 9003
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Absolute path to the working directory of the program being debugged. Default is the current workspace.",
+                "default": "${workspaceRoot}"
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "sco",
+            "request": "launch",
+            "name": "Debug Sco",
+            "stopOnEntry": true
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Sco Debug: Launch",
+            "description": "A new configuration for debugging sco",
+            "body": {
+              "type": "sco",
+              "request": "launch",
+              "name": "Debug Sco",
+              "stopOnEntry": true
+            }
+          }
+        ]
       }
     ]
   }
